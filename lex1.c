@@ -276,7 +276,7 @@ TOKEN special (TOKEN tok)
         {
             tok->tokentype = DELIMITER;
             //stupid but correct
-            tok->whichval = (sizeof(delprnt)/8);
+            tok->whichval = 8;
             getchar();
             getchar();
             return(tok);
@@ -351,12 +351,12 @@ double handleExponent(double number)
 
 }
 
-double getDecimalPortion(long intPortion, int significantConsumed) 
+double getDecimalPortion(double intPortion, int significantConsumed) 
 {
     getchar(); //move past decimal
     long decimal = 0;
     int  c, charval;
-    long divideBy = 1;
+    double divideBy = 1.0;
     int numMantissaDigits = significantConsumed;
     int significant;
     if(significantConsumed>0)
@@ -372,7 +372,7 @@ double getDecimalPortion(long intPortion, int significantConsumed)
     {  
         if (c=='e')
         {
-            double number = (double)intPortion + (double)decimal/(double)divideBy;
+            double number = intPortion + (double)decimal/divideBy;
             double realNum = handleExponent(number);
             return realNum;
         }
@@ -385,15 +385,19 @@ double getDecimalPortion(long intPortion, int significantConsumed)
         }
         if(numMantissaDigits<MAX_SIGNIFICANT_DIGITS)
         {
+            //printf("Here... mantissa digs is %d and decimal is %d\n", numMantissaDigits, decimal);
             decimal = decimal * 10 + charval;
-            divideBy = divideBy*10;
+            divideBy = divideBy*10.0;
         }
         if (charval!=0 || significant) //significant lets us know if zeros are significant digits
         {
             numMantissaDigits=numMantissaDigits+1;
         }
+        //printf("Divdeby is %d\n", divideBy);
+        //divideBy = divideBy*10.0;
     }
-    return ((double)intPortion+(double)decimal/(double)divideBy);
+    //printf("Here... mantissa digs is %d and decimal is %d\n", numMantissaDigits, decimal);
+    return (intPortion+(double)decimal/divideBy);
 }
 
 
@@ -402,23 +406,24 @@ TOKEN number (TOKEN tok)
 { 
     double realNum;
     int isReal = 0;
-    long num;
+    double num;
     int  c, charval;
-    num = 0;
+    num = 0.0;
     int significantConsumed = 0;
     while ( (c = peekchar()) != EOF
             && ((CHARCLASS[c] == NUMERIC)||(c=='.')||c=='e'))
     {  
         if (c=='.') 
         {
+           // printf("saw first .\n");
             int nextc=peek2char();
+           // printf("nextc is: %c\n", nextc);
             if(nextc=='.')
             {
-                tok->tokentype = DELIMITER;
-                //stupid but correct
-                tok->whichval = 8;
-                getchar();
-                getchar();
+             //   printf("here!!!!!");
+                tok->tokentype = NUMBERTOK;
+                tok->datatype = INTEGER;
+                tok->intval = (int)num;
                 return(tok);
             }
             //TODO get precision right
@@ -429,7 +434,7 @@ TOKEN number (TOKEN tok)
         }
         if (c=='e')
         {
-            realNum = handleExponent((double)num);
+            realNum = handleExponent(num);
             isReal = 1;
             break;
 
@@ -439,13 +444,13 @@ TOKEN number (TOKEN tok)
         charval = (c - '0');
         if (significantConsumed<MAX_SIGNIFICANT_DIGITS)
         {
-            num = num * 10 + charval;
-            if(num!=0)
+            num = num * 10.0 + (double)charval;
+            if(num!=0.0)
                 significantConsumed=significantConsumed+1;
         }
         else
         {
-            num=num*10;
+            num=num*10.0;
         }
     }
     if(isReal) 
