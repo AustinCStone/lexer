@@ -95,8 +95,35 @@ TOKEN identifier (TOKEN tok)
     }
 
 TOKEN getstring (TOKEN tok)
-  {
-    }
+{
+    getchar(); //move past initial '
+    char str[16];
+    int i = 0;
+    int twoQuotes = 0;
+    //long num;
+    int  c, nextc, charval;
+    while ( (c = peekchar()) != EOF
+        && (nextc = peek2char())
+        && ((c != '\'') || (c=='\'' && nextc =='\'') || (twoQuotes)))
+        {  
+          if (twoQuotes)
+          {
+            twoQuotes = 0;
+          }  
+          if ((c=='\'' && nextc =='\'')) 
+          {
+            twoQuotes = 1;
+          }  
+          str[i]=c; 
+          c = getchar();
+          i = i + 1;
+        }
+    str[i]='\0';
+    getchar(); //get the ending ' 
+    tok->tokentype = STRINGTOK;
+    strcpy(tok->stringval, str);
+    return (tok);
+}
 
 TOKEN special (TOKEN tok)
   {
