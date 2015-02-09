@@ -19,6 +19,11 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. */
 
+#define MAX_INT_VALUE 2147483647
+#define MIN_FLOAT_VALUE .0000000000000000000001
+#define MAX_FLOAT_VALUE 100000000000000000000000000000000000000.0 
+#define MAX_SIGNIFICANT_DIGITS 12
+
 #define MAXCHARCLASS 256
 
 #define ALPHA   1
@@ -26,6 +31,7 @@
 #define SPECIAL 3
 
 #define DEBUGGETTOKEN 0
+
 
 TOKEN talloc();
 int peekchar();

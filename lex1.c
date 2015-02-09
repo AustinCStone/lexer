@@ -24,8 +24,11 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <math.h>
+#include <float.h>
 #include "token.h"
 #include "lexan.h"
+
 
 /* This file will work as given with an input file consisting only
    of integers separated by blanks:
@@ -38,6 +41,8 @@
 
 void skipParenComments() 
 {
+  getchar(); //eat the next two chars
+  getchar();
   int c;
   int nextc;
   while ((c = peekchar()) != EOF
@@ -122,13 +127,22 @@ TOKEN identifier (TOKEN tok)
    
     int  c, nextc, charval;
     while ( (c = peekchar()) != EOF
-        && (CHARCLASS[c]==ALPHA || CHARCLASS[c]==NUMERIC)
-        && i<15)
-        {  
+        && (CHARCLASS[c]==ALPHA || CHARCLASS[c]==NUMERIC))
+    {  
+            if(i>=15)
+            {
+                while ( (c = peekchar()) != EOF
+                    && (CHARCLASS[c]==ALPHA || CHARCLASS[c]==NUMERIC))
+                {
+                        //printf("Consuming char in identifier\n");
+                        getchar();
+                }
+                continue;
+            }   
           str[i]=c; 
           c = getchar();
           i = i + 1;
-        }
+    }
 
     str[i]='\0';
     
@@ -180,16 +194,27 @@ TOKEN getstring (TOKEN tok)
         && (nextc = peek2char())
         && ((c != '\'') || (c=='\'' && nextc =='\'') || (twoQuotes)))
         { 
-
+            //consume remaining characters
             if(i>=15)
             {
-                 while ( (c = peekchar()) != EOF
+                while ( (c = peekchar()) != EOF
                     && (nextc = peek2char())
                     && ((c != '\'') || (c=='\'' && nextc =='\'') || (twoQuotes))) 
-                 {
+                {
                     getchar();
-                 }
-            } 
+
+                    if(twoQuotes)
+                    {
+                        twoQuotes=0;
+                    }
+                    if ((c=='\'' && nextc =='\'')) 
+                    {
+                        twoQuotes = 1;
+                    }  
+                }
+                continue;
+            }
+
           if (twoQuotes)
           {
             twoQuotes = 0;
@@ -197,6 +222,7 @@ TOKEN getstring (TOKEN tok)
           if ((c=='\'' && nextc =='\'')) 
           {
             twoQuotes = 1;
+            getchar();
           }  
           str[i]=c; 
           c = getchar();
@@ -288,24 +314,88 @@ TOKEN special (TOKEN tok)
 
 }
 
-double getDecimalPortion() 
+double handleExponent(double number)
+{
+    getchar(); //consume the e
+    int c;
+    long exponent = 0;
+    int negativeExp = 0;
+    int charval;
+    c = peekchar();
+    if (c=='-')
+    {
+        negativeExp = 1;
+        getchar();
+    }
+    if (c=='+')
+    {
+        getchar();
+    }
+    while ((c = peekchar()) != EOF
+        && ((CHARCLASS[c] == NUMERIC)))
+    {
+            c = getchar();
+            charval = (c - '0');
+            exponent = exponent * 10 + charval;
+    }
+    double output;
+    if (negativeExp)
+    {
+        output = number * pow(10.0,0.0-(double)exponent);
+    }
+    else
+    {
+        output = number * pow(10.0,(double)exponent);
+    }
+    return output;
+
+}
+
+double getDecimalPortion(long intPortion, int significantConsumed) 
 {
     getchar(); //move past decimal
-    long num;
+    long decimal = 0;
     int  c, charval;
-    num = 0;
     long divideBy = 1;
+    int numMantissaDigits = significantConsumed;
+    int significant;
+    if(significantConsumed>0)
+    {
+        significant = 1;
+    }
+    else 
+    {
+        significant = 0;
+    }
     while ( (c = peekchar()) != EOF
-            && (CHARCLASS[c] == NUMERIC))
+            && (CHARCLASS[c] == NUMERIC || c=='e'))
     {  
+        if (c=='e')
+        {
+            double number = (double)intPortion + (double)decimal/(double)divideBy;
+            double realNum = handleExponent(number);
+            return realNum;
+        }
         
         c = getchar();
         charval = (c - '0');
-        num = num * 10 + charval;
-        divideBy = divideBy*10;
+        if (charval!=0)
+        {
+            significant=1;
+        }
+        if(numMantissaDigits<MAX_SIGNIFICANT_DIGITS)
+        {
+            decimal = decimal * 10 + charval;
+            divideBy = divideBy*10;
+        }
+        if (charval!=0 || significant) //significant lets us know if zeros are significant digits
+        {
+            numMantissaDigits=numMantissaDigits+1;
+        }
     }
-    return (double)num/(double)divideBy;
+    return ((double)intPortion+(double)decimal/(double)divideBy);
 }
+
 
 /* Get and convert unsigned numbers of all types. */
 TOKEN number (TOKEN tok)
@@ -315,37 +405,86 @@ TOKEN number (TOKEN tok)
     long num;
     int  c, charval;
     num = 0;
+    int significantConsumed = 0;
     while ( (c = peekchar()) != EOF
-            && ((CHARCLASS[c] == NUMERIC)||(c=='.')))
+            && ((CHARCLASS[c] == NUMERIC)||(c=='.')||c=='e'))
     {  
         if (c=='.') 
         {
+            int nextc=peek2char();
+            if(nextc=='.')
+            {
+                tok->tokentype = DELIMITER;
+                //stupid but correct
+                tok->whichval = 8;
+                getchar();
+                getchar();
+                return(tok);
+            }
             //TODO get precision right
-            double decimalPortion = getDecimalPortion();
-           
-            realNum = (double)num + decimalPortion;
-         
-         
+            realNum = getDecimalPortion(num, significantConsumed);
 
             isReal = 1;
             break;
-        } 
+        }
+        if (c=='e')
+        {
+            realNum = handleExponent((double)num);
+            isReal = 1;
+            break;
+
+        }
+
         c = getchar();
         charval = (c - '0');
-        num = num * 10 + charval;
+        if (significantConsumed<MAX_SIGNIFICANT_DIGITS)
+        {
+            num = num * 10 + charval;
+            if(num!=0)
+                significantConsumed=significantConsumed+1;
+        }
+        else
+        {
+            num=num*10;
+        }
     }
     if(isReal) 
     {
-        tok->tokentype=NUMBERTOK;
-        tok->datatype=REAL;
-       
-        tok->realval = realNum;
+
+        if(realNum>MAX_FLOAT_VALUE|| realNum<MIN_FLOAT_VALUE)
+        {
+            //printf("MAX_FLOAT_VALUE is %f\n", MAX_FLOAT_VALUE);
+            printf("Floating number out of range\n");
+            tok->tokentype=NUMBERTOK;
+            tok->datatype=REAL;
+            if (realNum<MIN_FLOAT_VALUE) {
+                tok->realval = MIN_FLOAT_VALUE; }
+            else {
+                 tok->realval = MAX_FLOAT_VALUE;
+            }
+        }
+        else
+        {
+            tok->tokentype=NUMBERTOK;
+            tok->datatype=REAL;
+            tok->realval = realNum;
+        }
     }
     else
     {
-        tok->tokentype = NUMBERTOK;
-        tok->datatype = INTEGER;
-        tok->intval = num;
+        if (num>MAX_INT_VALUE)
+        {
+            printf("Integer number out of range\n");
+            tok->intval=MAX_INT_VALUE;
+            tok->tokentype=NUMBERTOK;
+            tok->datatype=INTEGER;
+        }
+        else 
+        {
+            tok->tokentype = NUMBERTOK;
+            tok->datatype = INTEGER;
+            tok->intval = num;
+        }
     }
     return (tok);
 }
