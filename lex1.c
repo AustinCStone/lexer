@@ -87,12 +87,86 @@ void skipblanks ()
             getchar();
           }
       }
+}
+
+int isOperatorString(char* str)
+{
+    static char* opprnt[]  = {" ", "+", "-", "*", "/", ":=", "=", "<>", "<", "<=",
+                          ">=", ">",  "^", ".", "and", "or", "not", "div",
+                          "mod", "in"};
+    int i = 0; 
+    while(i<(sizeof(opprnt)/8))
+    {
+        if(strcmp(opprnt[i], str)==0)
+        {
+            return i;
+        }
+        i = i +1;
     }
+    return 0;
+}
 
 /* Get identifiers and reserved words */
 TOKEN identifier (TOKEN tok)
-  {
+{
+    char *resprnt[] = { " ", "array", "begin", "case", "const", "do",
+                           "downto", "else", "end", "file", "for",
+                   "function", "goto", "if", "label", "nil",
+                           "of", "packed", "procedure", "program", "record",
+                           "repeat", "set", "then", "to", "type",
+                   "until", "var", "while", "with" };
+
+    char str[16];
+    int i = 0;
+    
+   
+    int  c, nextc, charval;
+    while ( (c = peekchar()) != EOF
+        && (CHARCLASS[c]==ALPHA || CHARCLASS[c]==NUMERIC)
+        && i<15)
+        {  
+          str[i]=c; 
+          c = getchar();
+          i = i + 1;
+        }
+
+    str[i]='\0';
+    
+    i = 0;
+    
+    while(i<(sizeof(resprnt)/8)) 
+    {
+        if (strcmp(resprnt[i],str)==0) 
+        {
+           break;
+        }
+        i = i + 1;
+
     }
+    
+    if (i==sizeof(resprnt)/8)
+    {
+
+       int val = isOperatorString(str);
+       if(val)
+       {
+            tok->tokentype = OPERATOR;
+            tok->whichval=i;
+            return (tok);
+       }
+
+        tok->tokentype = IDENTIFIERTOK;
+        strcpy(tok->stringval, str);
+        return (tok);
+    }
+    else
+    {
+        tok->tokentype = RESERVED;
+        tok->whichval = i;
+        return (tok);
+    }
+
+}
 
 TOKEN getstring (TOKEN tok)
 {
@@ -105,7 +179,17 @@ TOKEN getstring (TOKEN tok)
     while ( (c = peekchar()) != EOF
         && (nextc = peek2char())
         && ((c != '\'') || (c=='\'' && nextc =='\'') || (twoQuotes)))
-        {  
+        { 
+
+            if(i>=15)
+            {
+                 while ( (c = peekchar()) != EOF
+                    && (nextc = peek2char())
+                    && ((c != '\'') || (c=='\'' && nextc =='\'') || (twoQuotes))) 
+                 {
+                    getchar();
+                 }
+            } 
           if (twoQuotes)
           {
             twoQuotes = 0;
@@ -126,22 +210,142 @@ TOKEN getstring (TOKEN tok)
 }
 
 TOKEN special (TOKEN tok)
-  {
+{
+
+    char* opprnt[]  =  {" ", "+", "-", "*", "/", ":=", "=", "<>", "<", "<=",
+                          ">=", ">",  "^", "."};
+
+    char *delprnt[] = { "  ", ",", ";", ":", "(", ")", "[", "]",
+                           ".."};
+
+    int i = 0;
+    int c, nextc;
+    if((c = peekchar())==EOF)
+        return (tok);
+    c = peekchar();
+    nextc = peek2char();
+
+    char cstr[2];
+    cstr[0]=c;
+    cstr[1]='\0';
+    char c2str[3];
+    c2str[0]=c;
+    c2str[1]=nextc;
+    c2str[2]='\0';
+
+
+    while(i<(sizeof(delprnt)/8))
+    {
+        if (c==':' && nextc=='=')
+        {
+            tok->tokentype = OPERATOR;
+            //stupid but correct
+            tok->whichval = 5;
+            getchar();
+            getchar();
+            return(tok);
+        }
+
+        if (c=='.' && nextc=='.')
+        {
+            tok->tokentype = DELIMITER;
+            //stupid but correct
+            tok->whichval = (sizeof(delprnt)/8);
+            getchar();
+            getchar();
+            return(tok);
+        }
+        if(strcmp(cstr,delprnt[i])==0)
+        {
+            tok->tokentype = DELIMITER;
+            tok->whichval = i;
+            getchar();
+            return(tok);
+        }
+        i = i + 1;
     }
+
+    i = 0;
+
+    while(i<(sizeof(opprnt)/8))
+    {
+        if(strcmp(cstr,opprnt[i])==0)
+        {
+            tok->tokentype = OPERATOR;
+            tok->whichval = i;
+            getchar();
+            return(tok);
+        }
+        if(strcmp(c2str,opprnt[i])==0)
+        {
+            tok->tokentype = OPERATOR;
+            tok->whichval = i;
+            getchar();
+            return(tok);
+        }
+        i = i + 1;    
+    }      
+
+}
+
+double getDecimalPortion() 
+{
+    getchar(); //move past decimal
+    long num;
+    int  c, charval;
+    num = 0;
+    long divideBy = 1;
+    while ( (c = peekchar()) != EOF
+            && (CHARCLASS[c] == NUMERIC))
+    {  
+        
+        c = getchar();
+        charval = (c - '0');
+        num = num * 10 + charval;
+        divideBy = divideBy*10;
+    }
+    return (double)num/(double)divideBy;
+}
 
 /* Get and convert unsigned numbers of all types. */
 TOKEN number (TOKEN tok)
-  { long num;
+{ 
+    double realNum;
+    int isReal = 0;
+    long num;
     int  c, charval;
     num = 0;
     while ( (c = peekchar()) != EOF
-            && CHARCLASS[c] == NUMERIC)
-      {   c = getchar();
-          charval = (c - '0');
-          num = num * 10 + charval;
-        }
-    tok->tokentype = NUMBERTOK;
-    tok->datatype = INTEGER;
-    tok->intval = num;
+            && ((CHARCLASS[c] == NUMERIC)||(c=='.')))
+    {  
+        if (c=='.') 
+        {
+            //TODO get precision right
+            double decimalPortion = getDecimalPortion();
+           
+            realNum = (double)num + decimalPortion;
+         
+         
+
+            isReal = 1;
+            break;
+        } 
+        c = getchar();
+        charval = (c - '0');
+        num = num * 10 + charval;
+    }
+    if(isReal) 
+    {
+        tok->tokentype=NUMBERTOK;
+        tok->datatype=REAL;
+       
+        tok->realval = realNum;
+    }
+    else
+    {
+        tok->tokentype = NUMBERTOK;
+        tok->datatype = INTEGER;
+        tok->intval = num;
+    }
     return (tok);
-  }
+}
